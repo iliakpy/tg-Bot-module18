@@ -1,38 +1,35 @@
-import telebot
-from config import keys, TOKEN
-from utils import CryptoConverter
+import requests
+import json
+from config import keys
 
-bot = telebot.TeleBot(TOKEN)
-
-
-@bot.message_handler(commands=['start', 'help'])
-def help(message: telebot.types.Message):
-    text = 'Чтобы начать работу введите комманду боту в следущем формате:\n<имя валюты>  \
-<в какую валюту перевести> \
-<количество переводимой валюты>\nУвидеть список всех доступных валют: /values'
-    bot.reply_to(message, text)
+class ConvertionException(Exception):
+    pass
 
 
-@bot.message_handler(commands=['values'])
-def values(message: telebot.types.Message):
-    text = 'Доступные валюты'
-    for key in keys.keys():
-        text = '\n'.join((text, key, ))
-    bot.reply_to(message, text)
+class CryptoConverter():
+    @staticmethod
+    def convert(quote: str, base: str, amount: str):
+        if quote == base:
+            raise ConvertionException(f'Невозможно перевести одинаковые валюты {base}.')
+        try:
+            quote_ticker = keys[quote]
+        except KeyError:
+            raise ConvertionException(f'Не удалось обработать валюту {quote}')
 
+        try:
+            base_ticker = keys[base]
+        except KeyError:
+            raise ConvertionException(f'Не удалось обработать валюту {base}')
 
-@bot.message_handler(content_types=['text', ])
-def convert(message: telebot.types.Message):
-    values = message.text.split(' ')
+        try:
+            amount_float = float(amount)
+        except ValueError:
+            raise ConvertionException(f'Не удалось обработать количество {amount}')
+        r = requests.get(f'https://min-api.cryptocompare.com/data/price?fsym={quote_ticker}&tsyms={base_ticker}')
 
-    if len(values) != 3:
-        bot.send_message(message.chat.id, 'Должно быть 3 параметра')
-        return
-    quote, base, amount = values
-    total_base = CryptoConverter.convert(quote, base, amount)
+        print(json.loads(r.content))
 
-    text = f'Цена {amount} {quote} в {base} - {total_base}'
-    bot.send_message(message.chat.id, text)
+        total_base = json.loads(r.content)[keys[base]]
 
+        return total_base * amount_float
 
-bot.polling()
